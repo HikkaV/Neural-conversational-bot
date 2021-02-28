@@ -1,33 +1,31 @@
 # Neural-conversational-bot
 For now only notebooks with solution for cornell-movie-dialogues data are available.
 
-```html
 <html>
  </head>&nbsp;</head>
 <table width="300px">
 <tr>
-<th colspan="3"><b>Planned things</b></th>
+<th colspan="3"><b>In plans</b></th>
 </tr>
-<tr>Notebooks with raw code<th width="350px"></th>
-<td width="50px">N<font color="green" size="30">OK</font></td>
+<tr><th width="350px">Notebooks with raw solution</th>
+<td width="50px"><font color="green" size="30">OK</font></td>
 </tr>
 <tr>
-<th>Training logs in MLFLOW</th>
+<th>Structured code</th>
 <td width="10px"><font color="yellow" size="30">In progress</font></td>
 </tr>
-<tr>
-<th>Structured code as API</th>
+<th>MLFLOW logs tracking</th>
 <td width="10px"><font color="yellow" size="30">In progress</font></td>
 </tr>
-<tr>
-<th>Different decoding strategies</th>
+<th>Various decoding strategies</th>
+<td width="10px"><font color="yellow" size="30">In progress</font></td>
+</tr>
+<th>Bigger dataset training</th>
 <td width="10px"><font color="red" size="30">Not started</font></td>
 </tr>
-<tr>
-<th>Training on bigger dataset</th>
+<th>Bash scripts to load data</th>
 <td width="10px"><font color="red" size="30">Not started</font></td>
 </tr>
-<tr>
 <th>Telegram bot</th>
 <td width="10px"><font color="red" size="30">Not started</font></td>
 </tr>
