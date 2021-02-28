@@ -29,5 +29,6 @@ For now only notebooks with solution for cornell-movie-dialogues data are availa
 <th>Telegram bot</th>
 <td width="10px"><font color="red" size="30">Not started</font></td>
 </tr>
+
 </table>
 </html>
