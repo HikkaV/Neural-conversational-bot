@@ -51,6 +51,16 @@ class Seq2Seq:
         self.loss_object = tf.keras.losses.SparseCategoricalCrossentropy(reduction='none',
                                                                          from_logits=True)
 
+    def load_models(self, encoder_path, decoder_path):
+        encoder = tf.keras.models.load_model(
+            encoder_path,
+            custom_objects={"PartialEmbeddingsUpdate": PartialEmbeddingsUpdate})
+        decoder = tf.keras.models.load_model(
+            decoder_path,
+            custom_objects={"PartialEmbeddingsUpdate": PartialEmbeddingsUpdate,
+                            "BahdanauAttention": BahdanauAttention})
+        return encoder, decoder
+
     def __build_models(self):
         # encoder
         enc_input = tf.keras.Input(shape=(None,), name='enc_input')
