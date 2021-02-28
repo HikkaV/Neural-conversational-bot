@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 from utils.dir_utils import mkdir
 from utils.dir_utils import os
+import mlflow
 import tqdm
 
 
@@ -37,6 +38,16 @@ class Seq2Seq:
         self.attention_units = attention_units
         self.dropout_prob = dropout_prob
         self.encoder, self.decoder = self.__build_models()
+        self.params = {"pretrained_embs" : self.pretrained_embs,
+                       "fine_tune" : self.fine_tune,
+                       "missing_tokens" : len(self.missing_tokens),
+                       "len_mapping" : len(token_mapping),
+                       "emb_units": emb_units,
+                       "lstm_units" : lstm_units,
+                       "attention_units" : attention_units,
+                       "dropout_prob" : dropout_prob,
+                       "length_token_mapping" : len(token_mapping)
+                       }
         self.loss_object = tf.keras.losses.SparseCategoricalCrossentropy(reduction='none',
                                                                          from_logits=True)
 
@@ -99,79 +110,90 @@ class Seq2Seq:
             ):
         mkdir(dir_save)
         now_date = datetime.strftime(datetime.now(), "%Y-%m-%d")
-        train_dataset = train_dataset.batch(batch_size)
-        validation_dataset = validation_dataset.batch(batch_size)
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        train_loss = []
-        val_loss = []
-        train_perplexity = []
-        val_perplexity = []
-        val_loss_bound = 0
-        epochs_overfit = 0
-        for epoch in tqdm.tqdm(range(num_epochs)):
-            total_train_loss = []
-            total_val_loss = []
-            total_train_perplexity = []
-            total_val_perplexity = []
+        template = "date:{}_fine_tune:{}_mode:{}".format(now_date, self.fine_tune, self.embedding_prefix)
+        with mlflow.start_run(run_name=str(template)):
 
-            for batched_x_enc, batched_x_dec, batched_y in train_dataset.take(steps_per_epoch):
-                batch_loss, batch_perplexity = self.train_step(np.array(batched_x_enc), np.array(batched_x_dec),
-                                                               np.array(batched_y),
-                                                               optimizer)
-                total_train_loss.append(batch_loss)
-                total_train_perplexity.append(batch_perplexity)
+            train_dataset = train_dataset.shuffle(batch_size).batch(batch_size)
+            validation_dataset = validation_dataset.batch(batch_size)
+            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+            train_loss = []
+            val_loss = []
+            train_perplexity = []
+            val_perplexity = []
+            val_loss_bound = 0
+            epochs_overfit = 0
+            self.params.update({"epochs" : num_epochs,
+                                "batch_size" : batch_size,
+                                "steps_per_epoch" : steps_per_epoch,
+                                "epochs_patience" : epochs_patience,
+                                "learning_rate" : learning_rate})
+            mlflow.log_params(self.params)
+            for epoch in tqdm.tqdm(range(num_epochs)):
+                total_train_loss = []
+                total_val_loss = []
+                total_train_perplexity = []
+                total_val_perplexity = []
 
-            total_train_perplexity = np.mean(total_train_perplexity)
-            total_train_loss = np.mean(total_train_loss)
+                for batched_x_enc, batched_x_dec, batched_y in train_dataset.take(steps_per_epoch):
+                    batch_loss, batch_perplexity = self.train_step(np.array(batched_x_enc), np.array(batched_x_dec),
+                                                                   np.array(batched_y),
+                                                                   optimizer)
+                    total_train_loss.append(batch_loss)
+                    total_train_perplexity.append(batch_perplexity)
 
-            print('\n')
-            print('Epoch {} train loss {:.4f} train perplexity {:.4f}'.format(epoch,
-                                                                              total_train_loss, total_train_perplexity))
+                total_train_perplexity = np.mean(total_train_perplexity)
+                total_train_loss = np.mean(total_train_loss)
 
-            for batched_x_test_enc, batched_x_test_dec, batched_test_y in validation_dataset.take(steps_per_epoch):
-                batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc), np.array(batched_x_test_dec),
-                                                             np.array(batched_test_y))
-                total_val_loss.append(batch_loss)
-                total_val_perplexity.append(batch_perplexity)
+                mlflow.log_metric('train_loss', total_train_loss, step=epoch)
+                mlflow.log_metric('train_perplexity', total_train_perplexity, step=epoch)
 
-            total_val_perplexity = np.mean(total_val_perplexity)
-            total_val_loss = np.mean(total_val_loss)
+                print('\n')
+                print('Epoch {} train loss {:.4f} train perplexity {:.4f}'.format(epoch,
+                                                                                  total_train_loss, total_train_perplexity))
 
-            if epoch == 0:
-                val_loss_bound = total_val_loss
+                for batched_x_test_enc, batched_x_test_dec, batched_test_y in validation_dataset.take(steps_per_epoch):
+                    batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc), np.array(batched_x_test_dec),
+                                                                 np.array(batched_test_y))
+                    total_val_loss.append(batch_loss)
+                    total_val_perplexity.append(batch_perplexity)
 
-            if total_val_loss > val_loss_bound:
-                epochs_overfit += 1
-                if epochs_overfit == 1:
-                    self.encoder.save(
-                        os.path.join(dir_save,
-                                     'encoder_date:{}_fine_tune:{}_mode:{}_epoch:{}.h5'.format(now_date, self.fine_tune,
-                                                                                               self.embedding_prefix,
-                                                                                               epoch)))
-                    self.decoder.save(
-                        os.path.join(dir_save,
-                                     'decoder_date:{}_fine_tune:{}_mode:{}_epoch:{}.h5'.format(now_date, self.fine_tune,
-                                                                                               self.embedding_prefix,
-                                                                                               epoch)))
-            else:
-                val_loss_bound = total_val_loss
-                epochs_overfit = 0
+                total_val_perplexity = np.mean(total_val_perplexity)
+                total_val_loss = np.mean(total_val_loss)
 
-            print('\n')
-            print('Epoch {} validation loss {:.4f} validation perplexity {:.4f}'.format(epoch,
-                                                                                        total_val_loss,
-                                                                                        total_val_perplexity))
-            print('\n')
+                mlflow.log_metric('val_loss', total_val_loss, step=epoch)
+                mlflow.log_metric('val_perplexity', total_val_perplexity, step=epoch)
 
-            train_loss.append(total_train_loss)
-            train_perplexity.append(total_train_perplexity)
-            val_loss.append(total_val_loss)
-            val_perplexity.append(total_val_perplexity)
-            if epochs_overfit == epochs_patience:
-                print('Validation loss has not improved for last {} epochs, stopping training!'.format(epochs_patience))
-                break
+                if epoch == 0:
+                    val_loss_bound = total_val_loss
 
-        print('Finished training')
+                if total_val_loss > val_loss_bound:
+                    epochs_overfit += 1
+                    if epochs_overfit == 1:
+                        self.encoder.save(
+                            os.path.join(dir_save,
+                                         'encoder_{}_epoch:{}.h5'.format(template,epoch)))
+                        self.decoder.save(
+                            os.path.join(dir_save,
+                                         'decoder_{}_epoch:{}.h5'.format(template, epoch)))
+                else:
+                    val_loss_bound = total_val_loss
+                    epochs_overfit = 0
+
+                print('\n')
+                print('Epoch {} validation loss {:.4f} validation perplexity {:.4f}'.format(epoch,
+                                                                                            total_val_loss,
+                                                                                            total_val_perplexity))
+                print('\n')
+
+                train_loss.append(total_train_loss)
+                train_perplexity.append(total_train_perplexity)
+                val_loss.append(total_val_loss)
+                val_perplexity.append(total_val_perplexity)
+                if epochs_overfit == epochs_patience:
+                    print('Validation loss has not improved for last {} epochs, stopping training!'.format(epochs_patience))
+                    break
+
+            print('Finished training')
 
     @tf.function
     def evaluate(self, encoder_input, decoder_input, target):
