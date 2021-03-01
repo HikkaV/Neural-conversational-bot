@@ -12,6 +12,7 @@ if gpus:
         # Memory growth must be set before GPUs have been initialized\n",
         print(e)
 tf.config.experimental_run_functions_eagerly(True)
+tf.random.set_seed(5)
 import numpy as np
 from datetime import datetime
 from utils.dir_utils import mkdir
