@@ -4,9 +4,15 @@ import numpy as np
 
 class Decoder:
     def __init__(self, encoder: tf.keras.Model,
-                 decoder: tf.keras.Model, **kwargs):
+                 decoder: tf.keras.Model,
+                 start_token: int,
+                 end_token: int,
+                 max_len: int = 10, ):
         self.encoder = encoder
         self.decoder = decoder
+        self.max_len = max_len
+        self.start_token = start_token
+        self.end_token = end_token
 
     def decode(self, input):
         pass
@@ -18,13 +24,13 @@ class GreedyDecoder(Decoder):
                  start_token: int,
                  end_token: int,
                  max_len: int = 10,
-                 **kwargs):
-        super().__init__(encoder, decoder, **kwargs)
-        self.encoder = encoder
-        self.decoder = decoder
-        self.max_len = max_len
-        self.start_token = start_token
-        self.end_token = end_token
+                 ):
+        super().__init__(encoder,
+                         decoder,
+                         start_token,
+                         end_token,
+                         max_len
+                         )
 
     def decode(self, input, max_len_output=50, return_attention=False):
         input = tf.keras.preprocessing.sequence.pad_sequences([input], padding='post', maxlen=self.max_len)
@@ -59,19 +65,20 @@ class GreedyDecoder(Decoder):
         else:
             return res
 
+
 class BeamSearchDecoder(Decoder):
     def __init__(self, encoder: tf.keras.Model,
                  decoder: tf.keras.Model,
                  start_token: int,
                  end_token: int,
                  max_len: int = 10,
-                 **kwargs):
-        super().__init__(encoder, decoder, **kwargs)
-        self.encoder = encoder
-        self.decoder = decoder
-        self.max_len = max_len
-        self.start_token = start_token
-        self.end_token = end_token
+                 ):
+        super().__init__(encoder,
+                         decoder,
+                         start_token,
+                         end_token,
+                         max_len
+                         )
 
     def decode(self, input, beam_size=3):
         start = [self.start_token]
@@ -88,9 +95,9 @@ class BeamSearchDecoder(Decoder):
                 state_h = s[2]
                 state_c = s[3]
                 output, state_h, state_c, attention_weights = self.decoder([target_seq,
-                                                                       state_h,
-                                                                       state_c,
-                                                                       encoder_hidden_states])
+                                                                            state_h,
+                                                                            state_c,
+                                                                            encoder_hidden_states])
                 output = np.hstack(output)
                 output = tf.nn.softmax(output).numpy()
                 word_preds = np.argsort(output)[-beam_size:]

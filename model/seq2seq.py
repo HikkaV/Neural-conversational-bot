@@ -6,6 +6,7 @@ from utils.dir_utils import mkdir
 from utils.dir_utils import os
 import mlflow
 import tqdm
+from model.decoding_techniques import Decoder, GreedyDecoder
 
 
 class Seq2Seq:
@@ -14,6 +15,7 @@ class Seq2Seq:
                  pad_token: int,
                  start_token: int,
                  end_token: int,
+                 max_len:int = 10,
                  embeddings: np.array = None,
                  embedding_prefix: str = None,
                  missing_tokens: np.array = None,
@@ -22,6 +24,7 @@ class Seq2Seq:
                  lstm_units: int = 128,
                  attention_units: int = 128,
                  dropout_prob: float = 0.,
+                 decoding_strategy: Decoder = GreedyDecoder
                  ):
         self.embedding_prefix = embedding_prefix
         self.pad_token = pad_token
@@ -38,18 +41,23 @@ class Seq2Seq:
         self.attention_units = attention_units
         self.dropout_prob = dropout_prob
         self.encoder, self.decoder = self.__build_models()
-        self.params = {"pretrained_embs" : self.pretrained_embs,
-                       "fine_tune" : self.fine_tune,
-                       "missing_tokens" : len(self.missing_tokens),
-                       "len_mapping" : len(token_mapping),
+        self.params = {"pretrained_embs": self.pretrained_embs,
+                       "fine_tune": self.fine_tune,
+                       "missing_tokens": len(self.missing_tokens),
+                       "len_mapping": len(token_mapping),
                        "emb_units": emb_units,
-                       "lstm_units" : lstm_units,
-                       "attention_units" : attention_units,
-                       "dropout_prob" : dropout_prob,
-                       "length_token_mapping" : len(token_mapping)
+                       "lstm_units": lstm_units,
+                       "attention_units": attention_units,
+                       "dropout_prob": dropout_prob,
+                       "length_token_mapping": len(token_mapping)
                        }
         self.loss_object = tf.keras.losses.SparseCategoricalCrossentropy(reduction='none',
                                                                          from_logits=True)
+        self.predict = decoding_strategy(self.encoder,
+                         self.decoder,
+                         start_token,
+                         end_token,
+                         max_len).decode
 
     def load_models(self, encoder_path, decoder_path):
         encoder = tf.keras.models.load_model(
@@ -132,11 +140,11 @@ class Seq2Seq:
             val_perplexity = []
             val_loss_bound = 0
             epochs_overfit = 0
-            self.params.update({"epochs" : num_epochs,
-                                "batch_size" : batch_size,
-                                "steps_per_epoch" : steps_per_epoch,
-                                "epochs_patience" : epochs_patience,
-                                "learning_rate" : learning_rate})
+            self.params.update({"epochs": num_epochs,
+                                "batch_size": batch_size,
+                                "steps_per_epoch": steps_per_epoch,
+                                "epochs_patience": epochs_patience,
+                                "learning_rate": learning_rate})
             mlflow.log_params(self.params)
             for epoch in tqdm.tqdm(range(num_epochs)):
                 total_train_loss = []
@@ -159,10 +167,12 @@ class Seq2Seq:
 
                 print('\n')
                 print('Epoch {} train loss {:.4f} train perplexity {:.4f}'.format(epoch,
-                                                                                  total_train_loss, total_train_perplexity))
+                                                                                  total_train_loss,
+                                                                                  total_train_perplexity))
 
                 for batched_x_test_enc, batched_x_test_dec, batched_test_y in validation_dataset.take(steps_per_epoch):
-                    batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc), np.array(batched_x_test_dec),
+                    batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc),
+                                                                 np.array(batched_x_test_dec),
                                                                  np.array(batched_test_y))
                     total_val_loss.append(batch_loss)
                     total_val_perplexity.append(batch_perplexity)
@@ -181,7 +191,7 @@ class Seq2Seq:
                     if epochs_overfit == 1:
                         self.encoder.save(
                             os.path.join(dir_save,
-                                         'encoder_{}_epoch:{}.h5'.format(template,epoch)))
+                                         'encoder_{}_epoch:{}.h5'.format(template, epoch)))
                         self.decoder.save(
                             os.path.join(dir_save,
                                          'decoder_{}_epoch:{}.h5'.format(template, epoch)))
@@ -200,7 +210,8 @@ class Seq2Seq:
                 val_loss.append(total_val_loss)
                 val_perplexity.append(total_val_perplexity)
                 if epochs_overfit == epochs_patience:
-                    print('Validation loss has not improved for last {} epochs, stopping training!'.format(epochs_patience))
+                    print('Validation loss has not improved for last {} epochs, stopping training!'.format(
+                        epochs_patience))
                     break
 
             print('Finished training')
