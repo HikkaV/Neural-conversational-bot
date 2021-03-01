@@ -16,3 +16,4 @@ def plot_attention(attention, sentence, predicted_sentence):
   ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
 
   plt.show()
+

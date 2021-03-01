@@ -1,5 +1,17 @@
 from model.layers import BahdanauAttention, PartialEmbeddingsUpdate
-from model.layers import tf
+import tensorflow as tf
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Currently, memory growth needs to be the same across GPUs\n",
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized\n",
+        print(e)
+tf.config.experimental_run_functions_eagerly(True)
 import numpy as np
 from datetime import datetime
 from utils.dir_utils import mkdir
@@ -24,15 +36,17 @@ class Seq2Seq:
                  lstm_units: int = 128,
                  attention_units: int = 128,
                  dropout_prob: float = 0.,
-                 decoding_strategy: Decoder = GreedyDecoder
+                 decoding_strategy: Decoder = GreedyDecoder,
+                 path_decoder:str = "",
+                 path_encoder:str = ""
                  ):
         self.embedding_prefix = embedding_prefix
         self.pad_token = pad_token
         self.start_token = start_token
         self.end_token = end_token
-        self.pretrained_embs = embeddings != None
+        self.pretrained_embs = not (embeddings is None)
         self.embeddings = embeddings
-        self.missing_tokens = missing_tokens if missing_tokens else np.array([])
+        self.missing_tokens = missing_tokens if not (missing_tokens is None) else np.array([])
         self.fine_tune = fine_tune
         self.emb_units = emb_units
         self.token_mapping = token_mapping
@@ -40,7 +54,10 @@ class Seq2Seq:
         self.lstm_units = lstm_units
         self.attention_units = attention_units
         self.dropout_prob = dropout_prob
-        self.encoder, self.decoder = self.__build_models()
+        if not (path_encoder and path_decoder):
+            self.encoder, self.decoder = self.__build_models()
+        else:
+            self.load_models(path_encoder, path_decoder)
         self.params = {"pretrained_embs": self.pretrained_embs,
                        "fine_tune": self.fine_tune,
                        "missing_tokens": len(self.missing_tokens),
@@ -60,14 +77,14 @@ class Seq2Seq:
                          max_len).decode
 
     def load_models(self, encoder_path, decoder_path):
-        encoder = tf.keras.models.load_model(
+        self.encoder = tf.keras.models.load_model(
             encoder_path,
             custom_objects={"PartialEmbeddingsUpdate": PartialEmbeddingsUpdate})
-        decoder = tf.keras.models.load_model(
+        self.decoder = tf.keras.models.load_model(
             decoder_path,
             custom_objects={"PartialEmbeddingsUpdate": PartialEmbeddingsUpdate,
                             "BahdanauAttention": BahdanauAttention})
-        return encoder, decoder
+
 
     def __build_models(self):
         # encoder
@@ -80,6 +97,11 @@ class Seq2Seq:
             if self.fine_tune:
                 embedding_layer = tf.keras.layers.Embedding(len(self.token_mapping), emb_units,
                                                             weights=[self.embeddings],
+                                                            name='embedding')
+            elif self.missing_tokens.size==0:
+                embedding_layer = tf.keras.layers.Embedding(len(self.token_mapping), emb_units,
+                                                            weights=[self.embeddings],
+                                                            trainable=False,
                                                             name='embedding')
             else:
                 embedding_layer = PartialEmbeddingsUpdate(len(self.token_mapping), emb_units, self.missing_tokens,
@@ -124,15 +146,19 @@ class Seq2Seq:
             batch_size: int = 256,
             steps_per_epoch: int = 1000,
             epochs_patience: int = 10,
-            dir_save: str = 'models'
+            dir_save: str = 'models',
+            experiment_name:str = "tmp"
             ):
+        mlflow.set_experiment(experiment_name=experiment_name)
         mkdir(dir_save)
         now_date = datetime.strftime(datetime.now(), "%Y-%m-%d")
         template = "date:{}_fine_tune:{}_mode:{}".format(now_date, self.fine_tune, self.embedding_prefix)
+        encoder_path = ""
+        decoder_path = ""
         with mlflow.start_run(run_name=str(template)):
 
             train_dataset = train_dataset.shuffle(batch_size).batch(batch_size)
-            validation_dataset = validation_dataset.batch(batch_size)
+            validation_dataset = validation_dataset.batch(batch_size) if not (validation_dataset is None) else validation_dataset
             optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
             train_loss = []
             val_loss = []
@@ -169,51 +195,54 @@ class Seq2Seq:
                 print('Epoch {} train loss {:.4f} train perplexity {:.4f}'.format(epoch,
                                                                                   total_train_loss,
                                                                                   total_train_perplexity))
+                if not (validation_dataset is None):
+                    for batched_x_test_enc, batched_x_test_dec, batched_test_y in validation_dataset.take(steps_per_epoch):
+                        batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc),
+                                                                     np.array(batched_x_test_dec),
+                                                                     np.array(batched_test_y))
+                        total_val_loss.append(batch_loss)
+                        total_val_perplexity.append(batch_perplexity)
 
-                for batched_x_test_enc, batched_x_test_dec, batched_test_y in validation_dataset.take(steps_per_epoch):
-                    batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc),
-                                                                 np.array(batched_x_test_dec),
-                                                                 np.array(batched_test_y))
-                    total_val_loss.append(batch_loss)
-                    total_val_perplexity.append(batch_perplexity)
+                    total_val_perplexity = np.mean(total_val_perplexity)
+                    total_val_loss = np.mean(total_val_loss)
 
-                total_val_perplexity = np.mean(total_val_perplexity)
-                total_val_loss = np.mean(total_val_loss)
+                    mlflow.log_metric('val_loss', total_val_loss, step=epoch)
+                    mlflow.log_metric('val_perplexity', total_val_perplexity, step=epoch)
 
-                mlflow.log_metric('val_loss', total_val_loss, step=epoch)
-                mlflow.log_metric('val_perplexity', total_val_perplexity, step=epoch)
+                    if epoch == 0:
+                        val_loss_bound = total_val_loss
 
-                if epoch == 0:
-                    val_loss_bound = total_val_loss
+                    if total_val_loss > val_loss_bound:
+                        epochs_overfit += 1
+                        if epochs_overfit == 1:
+                            encoder_path = os.path.join(dir_save,
+                                             'encoder_{}_epoch:{}.h5'.format(template, epoch))
+                            decoder_path = os.path.join(dir_save,
+                                             'decoder_{}_epoch:{}.h5'.format(template, epoch))
+                            self.encoder.save(encoder_path)
+                            self.decoder.save(decoder_path)
+                    else:
+                        val_loss_bound = total_val_loss
+                        epochs_overfit = 0
 
-                if total_val_loss > val_loss_bound:
-                    epochs_overfit += 1
-                    if epochs_overfit == 1:
-                        self.encoder.save(
-                            os.path.join(dir_save,
-                                         'encoder_{}_epoch:{}.h5'.format(template, epoch)))
-                        self.decoder.save(
-                            os.path.join(dir_save,
-                                         'decoder_{}_epoch:{}.h5'.format(template, epoch)))
-                else:
-                    val_loss_bound = total_val_loss
-                    epochs_overfit = 0
-
-                print('\n')
-                print('Epoch {} validation loss {:.4f} validation perplexity {:.4f}'.format(epoch,
-                                                                                            total_val_loss,
-                                                                                            total_val_perplexity))
-                print('\n')
+                    print('\n')
+                    print('Epoch {} validation loss {:.4f} validation perplexity {:.4f}'.format(epoch,
+                                                                                                total_val_loss,
+                                                                                                total_val_perplexity))
+                    print('\n')
+                    val_loss.append(total_val_loss)
+                    val_perplexity.append(total_val_perplexity)
 
                 train_loss.append(total_train_loss)
                 train_perplexity.append(total_train_perplexity)
-                val_loss.append(total_val_loss)
-                val_perplexity.append(total_val_perplexity)
+
                 if epochs_overfit == epochs_patience:
                     print('Validation loss has not improved for last {} epochs, stopping training!'.format(
                         epochs_patience))
                     break
 
+            if encoder_path and decoder_path:
+                self.load_models(encoder_path, decoder_path)
             print('Finished training')
 
     @tf.function

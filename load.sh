@@ -13,9 +13,11 @@ rm en.tar.gz
 
 #loading w2v embeddings
 wget -c "https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz"
-mkdir -p "embeddings"
-gzip "GoogleNews-vectors-negative300.bin.gz" -d embeddings/
+mkdir -p "embeddings/"
+gzip "GoogleNews-vectors-negative300.bin.gz"
 rm GoogleNews-vectors-negative300.bin.gz
+mv GoogleNews-vectors-negative300.bin embeddings/
+
 #loading glove embeddings
 wget -c "http://nlp.stanford.edu/data/glove.6B.zip"
 unzip "glove.6B.zip" -d embeddings/

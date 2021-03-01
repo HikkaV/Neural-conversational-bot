@@ -80,3 +80,14 @@ def uncover_reduction(x):
   x = ' '.join(i.replace("'",'') for i in x.split(' ') if i ).strip()
   return x
 
+def replace_in_conversations(conversations,unk_dict):
+    new_conversations = []
+    for conversation in conversations:
+        new_conversation = []
+        for phrase in conversation:
+            new_phrase = ' '.join(unk_dict.get(i,i) for i in phrase.split(' '))
+            if new_phrase:
+                new_conversation.append(new_phrase)
+        if new_conversation:
+            new_conversations.append(new_conversation)
+    return new_conversations
