@@ -1,5 +1,6 @@
 from model.layers import BahdanauAttention, PartialEmbeddingsUpdate
 import tensorflow as tf
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
@@ -11,7 +12,6 @@ if gpus:
     except RuntimeError as e:
         # Memory growth must be set before GPUs have been initialized\n",
         print(e)
-tf.config.experimental_run_functions_eagerly(True)
 tf.random.set_seed(5)
 import numpy as np
 from datetime import datetime
@@ -28,7 +28,7 @@ class Seq2Seq:
                  pad_token: int,
                  start_token: int,
                  end_token: int,
-                 max_len:int = 10,
+                 max_len: int = 10,
                  embeddings: np.array = None,
                  embedding_prefix: str = None,
                  missing_tokens: np.array = None,
@@ -38,8 +38,8 @@ class Seq2Seq:
                  attention_units: int = 128,
                  dropout_prob: float = 0.,
                  decoding_strategy: Decoder = GreedyDecoder,
-                 path_decoder:str = "",
-                 path_encoder:str = ""
+                 path_decoder: str = "",
+                 path_encoder: str = ""
                  ):
         self.embedding_prefix = embedding_prefix
         self.pad_token = pad_token
@@ -72,10 +72,10 @@ class Seq2Seq:
         self.loss_object = tf.keras.losses.SparseCategoricalCrossentropy(reduction='none',
                                                                          from_logits=True)
         self.predict = decoding_strategy(self.encoder,
-                         self.decoder,
-                         start_token,
-                         end_token,
-                         max_len).decode
+                                         self.decoder,
+                                         start_token,
+                                         end_token,
+                                         max_len).decode
 
     def load_models(self, encoder_path, decoder_path):
         self.encoder = tf.keras.models.load_model(
@@ -86,6 +86,9 @@ class Seq2Seq:
             custom_objects={"PartialEmbeddingsUpdate": PartialEmbeddingsUpdate,
                             "BahdanauAttention": BahdanauAttention})
 
+    def save_models(self, encoder_path, decoder_path):
+        self.encoder.save(encoder_path)
+        self.decoder.save(decoder_path)
 
     def __build_models(self):
         # encoder
@@ -99,7 +102,7 @@ class Seq2Seq:
                 embedding_layer = tf.keras.layers.Embedding(len(self.token_mapping), emb_units,
                                                             weights=[self.embeddings],
                                                             name='embedding')
-            elif self.missing_tokens.size==0:
+            elif self.missing_tokens.size == 0:
                 embedding_layer = tf.keras.layers.Embedding(len(self.token_mapping), emb_units,
                                                             weights=[self.embeddings],
                                                             trainable=False,
@@ -148,7 +151,7 @@ class Seq2Seq:
             steps_per_epoch: int = 1000,
             epochs_patience: int = 10,
             dir_save: str = 'models',
-            experiment_name:str = "tmp"
+            experiment_name: str = "tmp"
             ):
         mlflow.set_experiment(experiment_name=experiment_name)
         mkdir(dir_save)
@@ -159,7 +162,8 @@ class Seq2Seq:
         with mlflow.start_run(run_name=str(template)):
 
             train_dataset = train_dataset.shuffle(batch_size).batch(batch_size)
-            validation_dataset = validation_dataset.batch(batch_size) if not (validation_dataset is None) else validation_dataset
+            validation_dataset = validation_dataset.batch(batch_size) if not (
+                    validation_dataset is None) else validation_dataset
             optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
             train_loss = []
             val_loss = []
@@ -179,9 +183,11 @@ class Seq2Seq:
                 total_train_perplexity = []
                 total_val_perplexity = []
 
-                for batched_x_enc, batched_x_dec, batched_y in train_dataset.take(steps_per_epoch):
-                    batch_loss, batch_perplexity = self.train_step(np.array(batched_x_enc), np.array(batched_x_dec),
+                for batched_x_enc, batched_x_dec, batched_y, batched_length in train_dataset.take(steps_per_epoch):
+                    batch_loss, batch_perplexity = self.train_step(np.array(batched_x_enc),
+                                                                   np.array(batched_x_dec),
                                                                    np.array(batched_y),
+                                                                   np.array(batched_length),
                                                                    optimizer)
                     total_train_loss.append(batch_loss)
                     total_train_perplexity.append(batch_perplexity)
@@ -197,10 +203,13 @@ class Seq2Seq:
                                                                                   total_train_loss,
                                                                                   total_train_perplexity))
                 if not (validation_dataset is None):
-                    for batched_x_test_enc, batched_x_test_dec, batched_test_y in validation_dataset.take(steps_per_epoch):
+                    for batched_x_test_enc, batched_x_test_dec, batched_test_y, batched_test_length in validation_dataset.take(
+                            steps_per_epoch):
                         batch_loss, batch_perplexity = self.evaluate(np.array(batched_x_test_enc),
                                                                      np.array(batched_x_test_dec),
-                                                                     np.array(batched_test_y))
+                                                                     np.array(batched_test_y),
+                                                                     np.array(batched_test_length))
+
                         total_val_loss.append(batch_loss)
                         total_val_perplexity.append(batch_perplexity)
 
@@ -217,11 +226,11 @@ class Seq2Seq:
                         epochs_overfit += 1
                         if epochs_overfit == 1:
                             encoder_path = os.path.join(dir_save,
-                                             'encoder_{}_epoch:{}.h5'.format(template, epoch))
+                                                        'encoder_{}_epoch:{}.h5'.format(template, epoch))
                             decoder_path = os.path.join(dir_save,
-                                             'decoder_{}_epoch:{}.h5'.format(template, epoch))
-                            self.encoder.save(encoder_path)
-                            self.decoder.save(decoder_path)
+                                                        'decoder_{}_epoch:{}.h5'.format(template, epoch))
+                            self.save_models(encoder_path=encoder_path,
+                                             decoder_path=decoder_path)
                     else:
                         val_loss_bound = total_val_loss
                         epochs_overfit = 0
@@ -247,10 +256,10 @@ class Seq2Seq:
             print('Finished training')
 
     @tf.function
-    def evaluate(self, encoder_input, decoder_input, target):
-        loss = 0
+    def evaluate(self, encoder_input, decoder_input, target, lengths):
         enc_hidden_states, state_h, state_c = self.encoder(encoder_input)
         # Teacher forcing - feeding the target as the next input
+        batched_loss = []
         for t in range(decoder_input.shape[1]):
             # passing enc_output to the decoder
             dec_input = tf.expand_dims(decoder_input[:, t], 1)
@@ -258,19 +267,24 @@ class Seq2Seq:
                                                                         state_h,
                                                                         state_c,
                                                                         enc_hidden_states])
+            batched_loss.append(self.loss_function(target[:, t], result))
 
-            loss += self.loss_function(target[:, t], result)
-        batch_loss = (loss / int(target.shape[1]))
-        batch_perplexity = tf.exp(batch_loss)
-        return batch_loss, batch_perplexity
+        batched_loss = tf.reshape(tf.stack(batched_loss), shape=decoder_input.shape)
+        batched_loss = tf.reduce_sum(batched_loss, axis=1)
+        lengths = tf.cast(lengths, dtype=batched_loss.dtype)
+        loss = tf.reduce_mean(batched_loss / lengths)
+
+        perplexity = tf.exp(loss)
+
+        return loss, perplexity
 
     @tf.function
-    def train_step(self, encoder_input, decoder_input, target, optimizer):
-        loss = 0
+    def train_step(self, encoder_input, decoder_input, target, lengths, optimizer):
 
         with tf.GradientTape() as tape:
             enc_hidden_states, state_h, state_c = self.encoder(encoder_input)
             # Teacher forcing - feeding the target as the next input
+            batched_loss = []
             for t in range(decoder_input.shape[1]):
                 # passing enc_output to the decoder
                 dec_input = tf.expand_dims(decoder_input[:, t], 1)
@@ -279,17 +293,20 @@ class Seq2Seq:
                                                                             state_c,
                                                                             enc_hidden_states])
 
-                loss += self.loss_function(target[:, t], result)
+                batched_loss.append(self.loss_function(target[:, t], result))
+            batched_loss = tf.reshape(tf.stack(batched_loss), shape=decoder_input.shape)
+            batched_loss = tf.reduce_sum(batched_loss, axis=1)
+            lengths = tf.cast(lengths, dtype=batched_loss.dtype)
+            loss = tf.reduce_mean(batched_loss / lengths)
 
-        batch_loss = (loss / int(target.shape[1]))
-        batch_perplexity = tf.exp(batch_loss)
+        perplexity = tf.exp(loss)
 
         variables = self.encoder.trainable_variables + self.decoder.trainable_variables
         gradients = tape.gradient(loss, variables)
 
         optimizer.apply_gradients(zip(gradients, variables))
 
-        return batch_loss, batch_perplexity
+        return loss, perplexity
 
     def loss_function(self, real, pred):
         mask = tf.math.logical_not(tf.math.equal(real, self.pad_token))
@@ -297,5 +314,4 @@ class Seq2Seq:
 
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
-
-        return tf.reduce_mean(loss_)
+        return loss_
