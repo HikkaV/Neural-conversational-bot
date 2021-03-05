@@ -12,19 +12,19 @@ For now only notebooks with solution for cornell-movie-dialogues data are availa
 </tr>
 <tr>
 <th>Structured code</th>
-<td width="10px"><font color="yellow" size="30">In progress</font></td>
+<td width="10px"><font color="yellow" size="30">OK</font></td>
 </tr>
 <th>MLFLOW logs tracking</th>
-<td width="10px"><font color="yellow" size="30">In progress</font></td>
+<td width="10px"><font color="yellow" size="30">OK</font></td>
 </tr>
 <th>Various decoding strategies</th>
-<td width="10px"><font color="yellow" size="30">In progress</font></td>
+<td width="10px"><font color="yellow" size="30">OK</font></td>
 </tr>
 <th>Bigger dataset training</th>
 <td width="10px"><font color="red" size="30">Not started</font></td>
 </tr>
 <th>Bash scripts to load data</th>
-<td width="10px"><font color="red" size="30">Not started</font></td>
+<td width="10px"><font color="red" size="30">OK</font></td>
 </tr>
 <th>Telegram bot</th>
 <td width="10px"><font color="red" size="30">Not started</font></td>
