@@ -294,6 +294,7 @@ class Seq2Seq:
                                                                             enc_hidden_states])
 
                 batched_loss.append(self.loss_function(target[:, t], result))
+
             batched_loss = tf.reshape(tf.stack(batched_loss), shape=decoder_input.shape)
             batched_loss = tf.reduce_sum(batched_loss, axis=1)
             lengths = tf.cast(lengths, dtype=batched_loss.dtype)
