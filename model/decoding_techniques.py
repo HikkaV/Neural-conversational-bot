@@ -124,3 +124,51 @@ class BeamSearchDecoder(Decoder):
             else:
                 break
         return final_caption[1:]
+
+class NucleusDecoder(Decoder):
+    def __init__(self, encoder: tf.keras.Model,
+                 decoder: tf.keras.Model,
+                 start_token: int,
+                 end_token: int,
+                 max_len: int = 10,
+                 ):
+        super().__init__(encoder,
+                         decoder,
+                         start_token,
+                         end_token,
+                         max_len
+                         )
+
+    def decode(self, input, max_len_output=50, top_p=0.95,
+               temperature=1):
+        input = tf.keras.preprocessing.sequence.pad_sequences([input], padding='post', maxlen=self.max_len)
+        encoder_hidden_states, state_h, state_c = self.encoder(input)
+
+        target_seq = np.zeros((1, 1))
+        target_seq[0, 0] = self.start_token
+
+        res = []
+        while True:
+            # Sample a token
+            output, state_h, state_c, attention_weights = self.decoder([target_seq,
+                                                                        state_h,
+                                                                        state_c,
+                                                                        encoder_hidden_states])
+            output = np.hstack(output)/temperature
+            output = tf.nn.softmax(output).numpy()
+            sorted_args = np.argsort(output)[::-1]
+            sorted_probs = output[sorted_args]
+            mask = np.cumsum(sorted_probs)<top_p
+            if not mask.any():
+                break
+            sampled_token_index = np.random.choice(sorted_args[mask],p=tf.nn.softmax(sorted_probs[mask]).numpy())
+
+            if len(res) > max_len_output or sampled_token_index == self.end_token:
+                break
+
+            res.append(sampled_token_index)
+
+            target_seq = np.zeros((1, 1))
+            target_seq[0, 0] = sampled_token_index
+
+        return res
