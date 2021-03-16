@@ -1,7 +1,7 @@
 from telegram_bot.bot import Seq2Seq, TelegramBot
 from utils.load_utils import load_json
 
-PATH = ""
+PATH = "token_mapping_cornell.json"
 mapping = load_json(PATH)
 inverse_mapping = dict((v,k) for k, v in mapping.items())
 pad_token = inverse_mapping[0]
@@ -13,8 +13,8 @@ model =  Seq2Seq(mapping,
          end_token=mapping[end_token],
          start_token=mapping[start_token],
          max_len=10,
-         path_decoder="",
-         path_encoder="")
+         path_decoder="decoder_all_data.h5",
+         path_encoder="encoder_all_data.h5")
 
 bot = TelegramBot(model, mapping,
             end_token=mapping[end_token],

@@ -46,6 +46,34 @@ class TelegramBot:
         self.predict = predict_greedy
         self.decoding_strategy = self.greedy_decoder
 
+        @self.BOT.callback_query_handler(func=lambda call: True)
+        def callback_worker(call):
+            if call.data == 'beam':
+                self.predict = predict_beam
+                self.decoding_strategy = self.beam_decoder
+            elif call.data == 'nucleus':
+                self.predict = predict_nucleus
+                self.decoding_strategy = self.nucleus_decoder
+
+        @self.BOT.message_handler(content_types=['text'],
+                                  )
+        def reply(message):
+            if message.text == "/help":
+                self.BOT.send_message(message.from_user.id,
+                                      "Hello. In order to start the bot please write /start.")
+            elif message.text == "/start" or message.text == "/choose":
+                self.BOT.send_message(message.from_user.id,
+                                      "Please choose type of decoding and then start the conversation.",
+                                      reply_markup=self.keys_decoding)
+            else:
+                processed_sentence = process_sentence(message.text, self.token_mapping,
+                                                      max_len=self.max_len)
+                result = self.predict(self.decoding_strategy, processed_sentence,
+                                      self.inverse_token_mapping)
+                self.BOT.send_message(message.from_user.id, result)
+
+
+
     def set_keys_decoding(self):
         keyboard = types.InlineKeyboardMarkup()
 
@@ -65,33 +93,8 @@ class TelegramBot:
 
         return keyboard
 
-    @BOT.message_handler(content_types=['text'], commands=['help'])
-    def handle_help(self, message):
-        self.BOT.send_message(message.from_user.id,
-                              "Hello. In order to start the bot please write /start.")
 
-    @BOT.message_handler(content_types=['text'], commands=['start'])
-    def handle_start(self, message):
-        self.BOT.send_message(message.from_user.id,
-                              "Please choose type of decoding and then start the conversation.",
-                              reply_markup=self.keys_decoding)
 
-    @BOT.callback_query_handler(func=lambda call: True)
-    def callback_worker(self, call):
-        if call.data == 'beam':
-            self.predict = predict_beam
-            self.decoding_strategy = self.beam_decoder
-        elif call.data == 'nucleus':
-            self.predict = predict_nucleus
-            self.decoding_strategy = self.nucleus_decoder
-
-    @BOT.message_handler(content_types=['text'])
-    def reply(self, message):
-        processed_sentence = process_sentence(message, self.token_mapping,
-                                              max_len=self.max_len)
-        result = self.predict(self.decoding_strategy, processed_sentence,
-                     self.inverse_token_mapping)
-        self.BOT.send_message(message.from_user.id, result)
 
     def start(self):
         self.BOT.polling(none_stop=True, interval=0)
