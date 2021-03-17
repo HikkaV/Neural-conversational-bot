@@ -35,35 +35,13 @@ def clean_bad_chars(x):
   return x
 
 
-def get_upper_tokens(x):
-    res = []
-    if x:
-        if ' ' in x:
-            res = [i for i in x.split(' ') if i and i[0].isupper()]
-        else:
-            if x[0].isupper():
-                res = [x]
-
-    return res
-
-
-def to_lower_case(x, to_lower: dict):
-    res = ''
-    if x:
-        if ' ' in x:
-            res = ' '.join(i.lower() if to_lower.get(i) else i for i in x.split(' '))
-        else:
-            if to_lower.get(x):
-                res = x.lower()
-    return res.strip()
-
 def uncover_reduction(x):
   x = re.sub(r"i'm", "i am", x)
   x = re.sub(r"he's", "he is", x)
   x = re.sub(r"she's", "she is", x)
   x = re.sub(r"it's", "it is", x)
   x = re.sub(r"that's", "that is", x)
-  x = re.sub(r"what's", "that is", x)
+  x = re.sub(r"what's", "what is", x)
   x = re.sub(r"where's", "where is", x)
   x = re.sub(r"how's", "how is", x)
   x = re.sub(r"\'ll", " will", x)
@@ -72,7 +50,7 @@ def uncover_reduction(x):
   x = re.sub(r"\'d", " would", x)
   x = re.sub(r"\'re", " are", x)
   x = re.sub(r"won't", "will not", x)
-  x = re.sub(r"can't", "cannot", x)
+  x = re.sub(r"can't", "can not", x)
   x = re.sub(r"n't", " not", x)
   x = re.sub(r"n'", "ng", x)
   x = re.sub(r"'bout", "about", x)

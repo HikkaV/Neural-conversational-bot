@@ -1,0 +1,12 @@
+tensorflow==2.2.0
+mlflow
+pandas
+matplotlib
+jupyter
+tqdm
+scikit-learn
+pytelegrambotapi
+numpy==1.19.5
+
+
+
