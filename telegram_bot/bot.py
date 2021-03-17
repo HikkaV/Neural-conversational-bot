@@ -45,6 +45,10 @@ class TelegramBot:
         self.keys_decoding = self.set_keys_decoding()
         self.predict = predict_greedy
         self.decoding_strategy = self.greedy_decoder
+        self.dict_params = {"beam": {"beam_size": 7},
+                            "nucleus": {"top_p": 0.95, "temperature": 1},
+                            }
+        self.decoding_type = "greedy"
 
         @self.BOT.callback_query_handler(func=lambda call: True)
         def callback_worker(call):
@@ -57,6 +61,8 @@ class TelegramBot:
             else:
                 self.predict = predict_greedy
                 self.decoding_strategy = self.greedy_decoder
+
+            self.decoding_type = call.data
 
         @self.BOT.message_handler(content_types=['text'],
                                   )
@@ -71,11 +77,20 @@ class TelegramBot:
             else:
                 processed_sentence = process_sentence(message.text, self.token_mapping,
                                                       max_len=self.max_len)
-                result = self.predict(self.decoding_strategy, processed_sentence,
-                                      self.inverse_token_mapping)
+                if self.decoding_type == 'beam':
+                    result = self.predict(self.decoding_strategy, processed_sentence,
+                                          self.inverse_token_mapping,
+                                          beam_size=self.dict_params[self.decoding_type]['beam_size'])
+                elif self.decoding_type == 'nucleus':
+                    result = self.predict(self.decoding_strategy, processed_sentence,
+                                          self.inverse_token_mapping,
+                                          top_p=self.dict_params[self.decoding_type]['top_p'],
+                                          temperature=self.dict_params[self.decoding_type]['temperature'])
+                else:
+                    result = self.predict(self.decoding_strategy, processed_sentence,
+                                          self.inverse_token_mapping)
+
                 self.BOT.send_message(message.from_user.id, result)
-
-
 
     def set_keys_decoding(self):
         keyboard = types.InlineKeyboardMarkup()
@@ -95,9 +110,6 @@ class TelegramBot:
         keyboard.add(key_greedy)
 
         return keyboard
-
-
-
 
     def start(self):
         self.BOT.polling(none_stop=True, interval=0)
