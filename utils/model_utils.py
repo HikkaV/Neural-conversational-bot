@@ -81,7 +81,7 @@ def predict_beam(decoder, mapped_sentence, inverse_token_mapping, beam_size=7):
     return answer
 
 
-def predict_nucleus(decoder, mapped_sentence, inverse_token_mapping, len_output=50, top_p=0.95):
+def predict_nucleus(decoder, mapped_sentence, inverse_token_mapping, len_output=50, top_p=0.75):
     prediction = decoder.decode(mapped_sentence, len_output, top_p)
     answer = " ".join([inverse_token_mapping.get(i) for i in prediction]).capitalize()
     return answer

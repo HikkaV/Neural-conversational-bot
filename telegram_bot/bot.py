@@ -54,6 +54,9 @@ class TelegramBot:
             elif call.data == 'nucleus':
                 self.predict = predict_nucleus
                 self.decoding_strategy = self.nucleus_decoder
+            else:
+                self.predict = predict_greedy
+                self.decoding_strategy = self.greedy_decoder
 
         @self.BOT.message_handler(content_types=['text'],
                                   )
