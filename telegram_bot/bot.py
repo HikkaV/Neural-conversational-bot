@@ -74,6 +74,13 @@ class TelegramBot:
                 self.BOT.send_message(message.from_user.id,
                                       "Please choose type of decoding and then start the conversation.",
                                       reply_markup=self.keys_decoding)
+            elif message.text == "/show_default":
+                if self.decoding_type != 'greedy':
+                    self.BOT.send_message(message.from_user.id,
+                                          "Default settings for used decoding strategy ({0}) are the following : {1}" \
+                                          .format(self.decoding_type, self.dict_params[self.decoding_type]))
+                else:
+                    self.BOT.send_message(message.from_user.id, "No settings for greedy decoding")
             else:
                 processed_sentence = process_sentence(message.text, self.token_mapping,
                                                       max_len=self.max_len)
