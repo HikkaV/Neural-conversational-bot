@@ -59,6 +59,7 @@ Trained models and mappings are accessible by the following link:
 To start telegram bot, run the following command:
 ` python start.py --path_decoder=<path to decoder> --path_encoder=<path to encoder> --path_mapping=<path to mapping> 
 ` 
+
 Example of model with filled arguments :
 ` python start.py --path_decoder=trained_ncb/decoder_all_data_cornell.h5 --path_encoder=trained_ncb/encoder_all_data_cornell.h5 --path_mapping=trained_ncb/token_mapping_cornell.json 
 `
