@@ -82,4 +82,7 @@ from Movie and TV Subtitles
 
 [6] Efficient Estimation of Word Representations in Vector Space
 
+[7] The Curious Case of Neural Text Degeneration
+
+
  
